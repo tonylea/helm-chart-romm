@@ -1,0 +1,74 @@
+image:
+  repository: rommapp/romm
+  # Empty uses the chart's appVersion.
+  tag: ""
+
+# A tz database name, for example Europe/London.
+timezone: Etc/UTC
+
+# An existing Secret holding the key RomM signs sessions and tokens with, for example from `openssl rand -hex 32`.
+# Required: without it the image makes a new key on every start, which logs everyone out.
+authSecretKey:
+  existingSecret: ""
+  key: key
+
+# The database RomM keeps its users, settings and library index in.
+# driver is mariadb, mysql or postgresql; host and the password's Secret are required.
+database:
+  driver: mariadb
+  host: ""
+  port: 3306
+  name: romm
+  user: romm
+  password:
+    existingSecret: ""
+    key: password
+
+# An existing Secret whose keys are RomM variable names, for example IGDB_CLIENT_ID or SCREENSCRAPER_PASSWORD, all passed to RomM.
+envFromSecret: ""
+
+# Any other RomM setting, by its variable name, for example ENABLE_SCHEDULED_RESCAN: true.
+env: {}
+
+# RomM's config.yml: exclusions, platform bindings, folder structure, scan priorities and EmulatorJS settings.
+# It's mounted read-only, so changes made in RomM's Library Management don't persist.
+config: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# ReadWriteOnce claims the chart owns.
+# Empty claimName names a claim <release>-<name>; an empty storageClassName uses the cluster's default class.
+persistence:
+  # /romm/resources: covers, screenshots and manuals fetched from the metadata sites.
+  resources:
+    claimName: ""
+    size: 10Gi
+    storageClassName: ""
+  # /romm/assets: saves, save states and screenshots players upload.
+  assets:
+    claimName: ""
+    size: 10Gi
+    storageClassName: ""
+  # /redis-data: the built-in Valkey's snapshot of queued and running tasks.
+  redisData:
+    claimName: ""
+    size: 1Gi
+    storageClassName: ""
+
+# The ROM library, mounted at /romm/library: the folder holding roms/ and bios/.
+# volume is any Kubernetes volume source; empty uses an emptyDir.
+# RomM writes to it when ROMs are uploaded or deleted, so it's read-write unless readOnly is true.
+library:
+  readOnly: false
+  volume: {}
+
+affinity: {}
+
+# A Gateway API HTTPRoute to the web UI.
+httpRoute:
+  enabled: false
+  parentRefs: []
+  hostnames: []

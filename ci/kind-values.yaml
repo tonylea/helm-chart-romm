@@ -1,0 +1,12 @@
+# The stand-in MariaDB and Secrets from ci/kind.
+authSecretKey:
+  existingSecret: romm-auth
+database:
+  host: mariadb
+  password:
+    existingSecret: romm-database
+# Mounts a config.yml with content, which RomM reads at start-up.
+config:
+  exclude:
+    platforms:
+      - ps2
