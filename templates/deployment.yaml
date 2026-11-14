@@ -21,6 +21,8 @@ spec:
         # RomM loads config.yml when it starts, so a change to it restarts the pod.
         checksum/config: {{ toYaml .Values.config | sha256sum }}
     spec:
+      # A Service named romm would inject ROMM_PORT=tcp://..., which RomM reads as the port nginx listens on.
+      enableServiceLinks: false
       containers:
         - name: romm
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
