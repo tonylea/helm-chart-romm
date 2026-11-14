@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.0.1](https://github.com/tonylea/helm-chart-romm/compare/v1.0.0...v1.0.1) (2026-11-14)
+
+### Bug Fixes
+
+* turn off service links, so a Service named romm can't set RomM's ROMM_PORT ([25de265](https://github.com/tonylea/helm-chart-romm/commit/25de265dd1784fe2325cbf973087e46b396252e5))
+
 ## 1.0.0 (2026-11-14)
 
 ### Features
