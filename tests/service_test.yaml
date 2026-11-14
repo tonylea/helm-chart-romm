@@ -1,0 +1,19 @@
+suite: Service
+release:
+  name: romm
+templates:
+  - templates/service.yaml
+tests:
+  - it: serves RomM's port, 8080
+    asserts:
+      - equal:
+          path: spec.ports
+          value:
+            - name: http
+              port: 8080
+              targetPort: http
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: romm
+            app.kubernetes.io/instance: romm

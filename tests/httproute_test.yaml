@@ -1,0 +1,40 @@
+suite: HTTPRoute
+release:
+  name: romm
+templates:
+  - templates/httproute.yaml
+tests:
+  - it: makes no route unless enabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when enabled without parentRefs
+    set:
+      httpRoute.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: httpRoute.parentRefs is required when httpRoute is enabled
+
+  - it: routes its hostnames to the Service
+    set:
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: gateway
+            namespace: ingress
+        hostnames:
+          - romm.example.com
+    asserts:
+      - equal:
+          path: spec
+          value:
+            parentRefs:
+              - name: gateway
+                namespace: ingress
+            hostnames:
+              - romm.example.com
+            rules:
+              - backendRefs:
+                  - name: romm
+                    port: 8080
