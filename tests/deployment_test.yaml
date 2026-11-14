@@ -20,6 +20,12 @@ tests:
           path: spec.template.spec.containers[0].image
           value: rommapp/romm:5.4.1
 
+  - it: turns off service links, so a Service named romm can't set ROMM_PORT
+    asserts:
+      - equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+
   - it: passes the timezone, auth key and database settings
     set:
       timezone: Europe/London
