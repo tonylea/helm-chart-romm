@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "romm.labels" . | nindent 4 }}
+spec:
+  # RomM's task queue is a Valkey inside the pod, and its claims are ReadWriteOnce, so the old pod stops before the new one starts.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "romm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "romm.labels" . | nindent 8 }}
+      annotations:
+        # RomM loads config.yml when it starts, so a change to it restarts the pod.
+        checksum/config: {{ toYaml .Values.config | sha256sum }}
+    spec:
+      containers:
+        - name: romm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: ROMM_AUTH_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "authSecretKey.existingSecret is required" .Values.authSecretKey.existingSecret }}
+                  key: {{ .Values.authSecretKey.key }}
+            - name: ROMM_DB_DRIVER
+              value: {{ .Values.database.driver | quote }}
+            - name: DB_HOST
+              value: {{ required "database.host is required" .Values.database.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DB_USER
+              value: {{ .Values.database.user | quote }}
+            - name: DB_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.password.existingSecret is required" .Values.database.password.existingSecret }}
+                  key: {{ .Values.database.password.key }}
+            {{- range $name, $value := .Values.env }}
+            - name: {{ $name }}
+              value: {{ $value | toString | quote }}
+            {{- end }}
+          {{- with .Values.envFromSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ . }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+          # Start-up waits for Valkey and runs the database migrations before RomM listens, so it gets 5 minutes.
+          startupProbe:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- range $claim := include "romm.claims" . | fromYamlArray }}
+            - name: {{ $claim.suffix }}
+              mountPath: {{ $claim.mountPath }}
+            {{- end }}
+            - name: library
+              mountPath: /romm/library
+              readOnly: {{ .Values.library.readOnly }}
+            - name: config
+              mountPath: /romm/config
+              readOnly: true
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        {{- range $claim := include "romm.claims" . | fromYamlArray }}
+        - name: {{ $claim.suffix }}
+          persistentVolumeClaim:
+            claimName: {{ include "romm.claimName" (dict "root" $ "claim" $claim) }}
+        {{- end }}
+        - name: library
+          {{- toYaml (.Values.library.volume | default (dict "emptyDir" (dict))) | nindent 10 }}
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-config

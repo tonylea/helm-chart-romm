@@ -1,0 +1,19 @@
+{{- range $claim := include "romm.claims" . | fromYamlArray }}
+{{- $persistence := index $.Values.persistence $claim.key }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "romm.claimName" (dict "root" $ "claim" $claim) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "romm.labels" $ | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $persistence.size }}
+{{- end }}

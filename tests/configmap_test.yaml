@@ -1,0 +1,29 @@
+suite: ConfigMap
+release:
+  name: romm
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: writes an empty config.yml by default
+    asserts:
+      - equal:
+          path: metadata.name
+          value: romm-config
+      - equal:
+          path: data["config.yml"]
+          value: |
+            {}
+
+  - it: writes config as config.yml
+    set:
+      config:
+        system:
+          platforms:
+            super_nintendo: snes
+    asserts:
+      - equal:
+          path: data["config.yml"]
+          value: |
+            system:
+              platforms:
+                super_nintendo: snes

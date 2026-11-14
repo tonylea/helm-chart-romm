@@ -1,0 +1,9 @@
+apiVersion: v2
+name: romm
+description: Deploys RomM, which scans, enriches and serves a personal library of retro game ROMs
+type: application
+version: 1.0.0
+appVersion: "5.4.1"
+home: https://github.com/tonylea/helm-chart-romm
+sources:
+  - https://github.com/rommapp/romm

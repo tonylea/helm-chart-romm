@@ -1,0 +1,241 @@
+suite: Deployment
+release:
+  name: romm
+templates:
+  - templates/deployment.yaml
+set:
+  authSecretKey.existingSecret: romm-auth
+  database.host: mariadb.databases
+  database.password.existingSecret: romm-database
+tests:
+  - it: runs one replica of the chart's appVersion, stopping the old pod first
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: rommapp/romm:5.4.1
+
+  - it: passes the timezone, auth key and database settings
+    set:
+      timezone: Europe/London
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: TZ
+              value: Europe/London
+            - name: ROMM_AUTH_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: romm-auth
+                  key: key
+            - name: ROMM_DB_DRIVER
+              value: mariadb
+            - name: DB_HOST
+              value: mariadb.databases
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: romm
+            - name: DB_USER
+              value: romm
+            - name: DB_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: romm-database
+                  key: password
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+
+  - it: fails without the auth key's Secret
+    set:
+      authSecretKey.existingSecret: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: authSecretKey.existingSecret is required
+
+  - it: fails without the database host
+    set:
+      database.host: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: database.host is required
+
+  - it: fails without the database password's Secret
+    set:
+      database.password.existingSecret: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: database.password.existingSecret is required
+
+  - it: passes each env entry as a string, after the chart's own
+    set:
+      env:
+        ENABLE_SCHEDULED_RESCAN: true
+        SCAN_WORKERS: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[8]
+          value:
+            name: ENABLE_SCHEDULED_RESCAN
+            value: "true"
+      - equal:
+          path: spec.template.spec.containers[0].env[9]
+          value:
+            name: SCAN_WORKERS
+            value: "2"
+
+  - it: passes every key of envFromSecret
+    set:
+      envFromSecret: romm-metadata
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          value:
+            - secretRef:
+                name: romm-metadata
+
+  - it: probes /api/heartbeat, giving start-up 5 minutes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe
+          value:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            periodSeconds: 30
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /api/heartbeat
+
+  - it: requests CPU and memory, with no limits
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+
+  - it: mounts the claims, an empty library and config.yml read-only
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts
+          value:
+            - name: resources
+              mountPath: /romm/resources
+            - name: assets
+              mountPath: /romm/assets
+            - name: redis-data
+              mountPath: /redis-data
+            - name: library
+              mountPath: /romm/library
+              readOnly: false
+            - name: config
+              mountPath: /romm/config
+              readOnly: true
+      - equal:
+          path: spec.template.spec.volumes
+          value:
+            - name: resources
+              persistentVolumeClaim:
+                claimName: romm-resources
+            - name: assets
+              persistentVolumeClaim:
+                claimName: romm-assets
+            - name: redis-data
+              persistentVolumeClaim:
+                claimName: romm-redis-data
+            - name: library
+              emptyDir: {}
+            - name: config
+              configMap:
+                name: romm-config
+
+  - it: mounts the claims it's named
+    set:
+      persistence.resources.claimName: romm-covers
+      persistence.assets.claimName: romm-saves
+      persistence.redisData.claimName: romm-queue
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: romm-covers
+      - equal:
+          path: spec.template.spec.volumes[1].persistentVolumeClaim.claimName
+          value: romm-saves
+      - equal:
+          path: spec.template.spec.volumes[2].persistentVolumeClaim.claimName
+          value: romm-queue
+
+  - it: mounts the library volume it's given, read-only when asked
+    set:
+      library:
+        readOnly: true
+        volume:
+          hostPath:
+            path: /srv/games
+            type: Directory
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[3]
+          value:
+            name: library
+            mountPath: /romm/library
+            readOnly: true
+      - equal:
+          path: spec.template.spec.volumes[3]
+          value:
+            name: library
+            hostPath:
+              path: /srv/games
+              type: Directory
+
+  - it: annotates the pod with config.yml's hash, so a change to it restarts the pod
+    set:
+      config:
+        exclude:
+          platforms: [ps2]
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: 488a6139a7ac9daf822273ccfce2512572ebdef20ce8cd76b184941922198f2b
+
+  - it: hashes an empty config.yml too
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+
+  - it: sets affinity only when given
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  - it: passes affinity through
+    set:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: example.com/zone
+                    operator: In
+                    values: ["a"]
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: example.com/zone
